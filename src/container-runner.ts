@@ -189,8 +189,21 @@ function readSecrets(): Record<string, string> {
 function buildContainerArgs(mounts: VolumeMount[], containerName: string): string[] {
   const args: string[] = ['run', '-i', '--rm', '--name', containerName];
 
+  // Use host networking so the container can reach WSL2/local services
+  // (e.g. an HTTP proxy running on the host's loopback interface).
+  // Volume mounts and user mapping still work correctly in host network mode.
+  args.push('--network', 'host');
+
   // Pass host timezone so container's local time matches the user's
   args.push('-e', `TZ=${TIMEZONE}`);
+
+  // Forward proxy environment variables so the container's outbound
+  // requests (Claude API calls, web fetches) route through the host proxy.
+  for (const proxyVar of ['HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY', 'http_proxy', 'https_proxy', 'no_proxy']) {
+    if (process.env[proxyVar]) {
+      args.push('-e', `${proxyVar}=${process.env[proxyVar]}`);
+    }
+  }
 
   // Run as host user so bind-mounted files are accessible.
   // Skip when running as root (uid 0), as the container's node user (uid 1000),
